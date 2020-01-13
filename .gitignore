@@ -1,0 +1,8 @@
+*.[oa]
+*.patch
+*.diff
+*.orig
+*.rej
+*out/*
+*git*
+*tags*
