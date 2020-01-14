@@ -6,3 +6,6 @@
 *out/*
 *git*
 *tags*
+
+gpio_test
+uart_test
