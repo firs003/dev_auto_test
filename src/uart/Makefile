@@ -4,7 +4,7 @@ VERBOSE=@
 
 CROSS_COMPILER_PRE=arm-linux-gnueabihf-
 CC=gcc
-CFLAGS=-Wall -Werror
+CFLAGS=-Wall -Werror -pthread
 CFLAGS += -I../../inc
 LD=ld
 # LDFLAGS=-L./out/ -static -llog_proxy
