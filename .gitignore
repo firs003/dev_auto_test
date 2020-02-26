@@ -6,6 +6,8 @@
 *out/*
 *git*
 *tags*
+backup/
+.vscode/
 
 gpio_test
 uart_test

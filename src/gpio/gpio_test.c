@@ -196,10 +196,6 @@ int main(int argc, const char *argv[])
 			// sleng_debug(" gpio test Success:gpio=%d,action=%d,option=%d\n", dev.gpio, dev.action, dev.option);
 			sleng_debug("GPIO[%d] -> GPIO[%d], change %d -> %d\n", gpio_matrix[i].pair[1].gpio, gpio_matrix[i].pair[0].gpio, gpio_matrix[i].pair[0].in[1], gpio_matrix[i].pair[0].in[0]);
 		}
-
-
-
-		// }
 	} while(0);
 
 	/* Cleanup */
