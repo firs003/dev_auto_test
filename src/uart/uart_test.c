@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
+#include <sys/select.h>
 
 #include "sleng_debug.h"
 
@@ -316,7 +317,7 @@ void *send_thread_func(void *arg)
                 args->senderr++;
                 sleng_error("[%s] send error, %u/%u, %.02f%%", args->uart_path, args->senderr, args->totalcnt, (args->totalcnt) ? 100 * (float)args->senderr / (float)args->totalcnt : 0.0);
             }
-            sleng_debug("%u.sendlen=%d, buf=0x%02hhx %02hhx %02hhx %02hhx   %02hhx %02hhx %02hhx %02hhx\n", args->totalcnt, sendlen, sendbuf[0], sendbuf[1], sendbuf[2], sendbuf[3], sendbuf[4], sendbuf[5], sendbuf[6], sendbuf[7]);
+            if (fd->debug_flag) sleng_debug("%u.sendlen=%d, buf=0x%02hhx %02hhx %02hhx %02hhx   %02hhx %02hhx %02hhx %02hhx\n", args->totalcnt, sendlen, sendbuf[0], sendbuf[1], sendbuf[2], sendbuf[3], sendbuf[4], sendbuf[5], sendbuf[6], sendbuf[7]);
 
 #if 0
             recvlen = read(fd_uart, recvbuf, args->packsize);
@@ -364,6 +365,9 @@ void *recv_thread_func(void *arg)
     int fd_uart = -1;
     int recvlen = 0, sendlen = 0;
     char *recvbuf = NULL;
+    fd_set rset;
+    struct timeval tv;
+    int rc = 0;
 
     fd->debug_flag = 1;
 
@@ -388,6 +392,22 @@ void *recv_thread_func(void *arg)
         while (!fd->quit_flag)
         {
             args->totalcnt++;
+            FD_ZERO(&rset);
+            FD_SET(fd_uart, &rset);
+            tv.tv_sec = 1;
+            tv.tv_usec = 0;
+            rc = select(fd_uart + 1, &rset, NULL, NULL, &tv);
+            if (rc < 0)
+            {
+                args->recverr++;
+                sleng_error("[%s] recv[%d < %d] error, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, recvlen, args->packsize, args->recverr, args->totalcnt, (args->totalcnt) ? 100 * (float)args->recverr / (float)args->totalcnt : 0.0, recvbuf[0]);
+                continue;
+            }
+            else if (rc == 0)
+            {
+                continue;
+            }
+            usleep(150000);
 
             recvlen = read(fd_uart, recvbuf, args->packsize);
             if (recvlen < args->packsize)
@@ -395,7 +415,7 @@ void *recv_thread_func(void *arg)
                 args->recverr++;
                 sleng_error("[%s] recv[%d < %d] error, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, recvlen, args->packsize, args->recverr, args->totalcnt, (args->totalcnt) ? 100 * (float)args->recverr / (float)args->totalcnt : 0.0, recvbuf[0]);
             }
-            sleng_debug("%u.recvlen=%d, buf=0x%02hhx %02hhx %02hhx %02hhx   %02hhx %02hhx %02hhx %02hhx\n", args->totalcnt, recvlen, recvbuf[0], recvbuf[1], recvbuf[2], recvbuf[3], recvbuf[4], recvbuf[5], recvbuf[6], recvbuf[7]);
+            if (fd->debug_flag) sleng_debug("%u.recvlen=%d, buf=0x%02hhx %02hhx %02hhx %02hhx   %02hhx %02hhx %02hhx %02hhx\n", args->totalcnt, recvlen, recvbuf[0], recvbuf[1], recvbuf[2], recvbuf[3], recvbuf[4], recvbuf[5], recvbuf[6], recvbuf[7]);
 
             sendlen = write(fd_uart, recvbuf, recvlen);
             if (sendlen < recvlen)
