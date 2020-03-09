@@ -101,12 +101,13 @@ static void signal_handler(int signo) {
 
 static int uart_open(const char *dev_path, int mode, int baudrate)
 {
-    int fd = -1, fd_mode = 0;
+    PUART_TEST_FD_S fd = &uart_fd;
+    int fd_uart = -1, fd_mode = 0;
     unsigned int value;
     struct termios options;
 
     do {
-    //	if (fd->debug_flag) sleng_debug("master: baudrate = %u\n", baudrate);
+    	if (fd->debug_flag) sleng_debug("baudrate = %u\n", baudrate);
         switch (baudrate) {
             case 300 :
                 value = B300;
@@ -160,16 +161,16 @@ static int uart_open(const char *dev_path, int mode, int baudrate)
                 fd_mode = O_RDONLY;
                 break;
         }
-        // if ((fd = open(dev_path, fd_mode | O_NOCTTY | O_NDELAY)) == -1) {
-        if ((fd = open(dev_path, fd_mode | O_NOCTTY)) == -1) {
+        // if ((fd_uart = open(dev_path, fd_mode | O_NOCTTY | O_NDELAY)) == -1) {
+        if ((fd_uart = open(dev_path, fd_mode | O_NOCTTY)) == -1) {
             sleng_error(":open uart device failure");
             break;
         }
-        if (tcgetattr(fd, &options) < 0) {
+        if (tcgetattr(fd_uart, &options) < 0) {
             sleng_error(":tcgetattr failure");
-            if (fd > 0) {
-                close(fd);
-                fd = -1;
+            if (fd_uart > 0) {
+                close(fd_uart);
+                fd_uart = -1;
             }
             break;
         }
@@ -177,17 +178,17 @@ static int uart_open(const char *dev_path, int mode, int baudrate)
         /* Set the baud rate to baudrate */
         if (mode & UART_MODE_RDONLY && cfsetispeed(&options, value) < 0) {
             sleng_error(":cfsetispeed failure");
-            if (fd > 0) {
-                close(fd);
-                fd = -1;
+            if (fd_uart > 0) {
+                close(fd_uart);
+                fd_uart = -1;
             }
             break;
         }
         if (mode & UART_MODE_WRONLY && cfsetospeed(&options, value) < 0) {
             sleng_error(":cfsetospeed failure");
-            if (fd > 0) {
-                close(fd);
-                fd = -1;
+            if (fd_uart > 0) {
+                close(fd_uart);
+                fd_uart = -1;
             }
             break;
         }
@@ -207,11 +208,11 @@ static int uart_open(const char *dev_path, int mode, int baudrate)
         options.c_cflag &= ~CSIZE;
         options.c_cflag |= CS8;
         options.c_iflag &= ~(INPCK|ISTRIP);
-        if (tcsetattr(fd, TCSANOW, &options) < 0) {
+        if (tcsetattr(fd_uart, TCSANOW, &options) < 0) {
             sleng_error(":tcsetattr c_cflag failure");
-            if (fd > 0) {
-                close(fd);
-                fd = -1;
+            if (fd_uart > 0) {
+                close(fd_uart);
+                fd_uart = -1;
             }
             break;
         }
@@ -224,19 +225,19 @@ static int uart_open(const char *dev_path, int mode, int baudrate)
         options.c_oflag &= ~OPOST;
 
         /* Set the timeout options */
-        // options.c_cc[VMIN]  = 0;
-        // options.c_cc[VTIME] = 10;
-        if (tcsetattr(fd, TCSANOW, &options) < 0) {
+        options.c_cc[VMIN]  = 0;
+        options.c_cc[VTIME] = 10;
+        if (tcsetattr(fd_uart, TCSANOW, &options) < 0) {
             sleng_error(":tcsetattr c_cc c_iflag c_lflag failure");
-            if (fd > 0) {
-                close(fd);
-                fd = -1;
+            if (fd_uart > 0) {
+                close(fd_uart);
+                fd_uart = -1;
             }
             break;
         }
     } while (0);
 
-    return fd;
+    return fd_uart;
 }
 
 
@@ -286,8 +287,15 @@ void *send_thread_func(void *arg)
             break;
         }
 
+        int i;
+        for (i = 0; i < args->packsize; i++)
+        {
+            sendbuf[i] = i;
+        }
+
         while (!fd->quit_flag)
         {
+#if 0
             readlen = fread(sendbuf, 1, args->packsize, fp_input);
             if (readlen < 0)
             {
@@ -299,15 +307,16 @@ void *send_thread_func(void *arg)
             {
                 fseek(fp_input, 0, SEEK_SET);
             }
-
+#endif
+            readlen = args->packsize;
             args->totalcnt++;
-            sendlen = write(fd_uart, recvbuf, recvlen);
+            sendlen = write(fd_uart, sendbuf, readlen);
             if (sendlen < recvlen)
             {
                 args->senderr++;
                 sleng_error("[%s] send error, %u/%u, %.02f%%", args->uart_path, args->senderr, args->totalcnt, (args->totalcnt) ? 100 * (float)args->senderr / (float)args->totalcnt : 0.0);
             }
-            sleng_debug("\n");
+            sleng_debug("%u.sendlen=%d, buf=0x%02hhx %02hhx %02hhx %02hhx   %02hhx %02hhx %02hhx %02hhx\n", args->totalcnt, sendlen, sendbuf[0], sendbuf[1], sendbuf[2], sendbuf[3], sendbuf[4], sendbuf[5], sendbuf[6], sendbuf[7]);
 
 #if 0
             recvlen = read(fd_uart, recvbuf, args->packsize);
@@ -356,6 +365,8 @@ void *recv_thread_func(void *arg)
     int recvlen = 0, sendlen = 0;
     char *recvbuf = NULL;
 
+    fd->debug_flag = 1;
+
     do {
         fd_uart = uart_open(args->uart_path, UART_MODE_RDWR, args->baudrate);
         if (fd_uart == -1) {
@@ -372,18 +383,19 @@ void *recv_thread_func(void *arg)
             ret = THREAD_FAILURE;
             break;
         }
-        if (fd->debug_flag) sleng_debug("malloc for recvbuf success, recvbuf=%p\n", recvbuf);
+        if (fd->debug_flag) sleng_debug("malloc for recvbuf success, recvbuf[%d]=%p\n", args->packsize, recvbuf);
 
         while (!fd->quit_flag)
         {
             args->totalcnt++;
+
             recvlen = read(fd_uart, recvbuf, args->packsize);
             if (recvlen < args->packsize)
             {
                 args->recverr++;
-                sleng_error("[%s] recv error, %u/%u, %.02f%%", args->uart_path, args->recverr, args->totalcnt, (args->totalcnt) ? 100 * (float)args->recverr / (float)args->totalcnt : 0.0);
+                sleng_error("[%s] recv[%d < %d] error, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, recvlen, args->packsize, args->recverr, args->totalcnt, (args->totalcnt) ? 100 * (float)args->recverr / (float)args->totalcnt : 0.0, recvbuf[0]);
             }
-            sleng_debug("\n");
+            sleng_debug("%u.recvlen=%d, buf=0x%02hhx %02hhx %02hhx %02hhx   %02hhx %02hhx %02hhx %02hhx\n", args->totalcnt, recvlen, recvbuf[0], recvbuf[1], recvbuf[2], recvbuf[3], recvbuf[4], recvbuf[5], recvbuf[6], recvbuf[7]);
 
             sendlen = write(fd_uart, recvbuf, recvlen);
             if (sendlen < recvlen)
@@ -475,7 +487,7 @@ int main(int argc, char const *argv[])
 
     for (i = 0; i < MAX_UART_AMOUNT; i++)
     {
-        sleng_debug("tid=%lu\n", uart_config_array[i].tid);
+        // sleng_debug("tid=%lu\n", uart_config_array[i].tid);
         if (uart_config_array[i].uart_path[0] != 0 && uart_config_array[i].tid > 0)
         {
             pthread_join(uart_config_array[i].tid, &thread_ret);
