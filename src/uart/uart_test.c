@@ -5,6 +5,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <unistd.h>
+#include <getopt.h>
 #include <sys/select.h>
 
 #include "sleng_debug.h"
@@ -450,16 +451,44 @@ int main(int argc, char const *argv[])
     FILE *fp_config = NULL;
     UART_CONFIG_S uart_config_array[MAX_UART_AMOUNT] = {0};
     int i;
+    const char short_options[] = "c:d";
+    const struct option long_options[] = {
+        {"config",		required_argument,	NULL,	'c'},
+        {"debug",		no_argument,		NULL,	'd'},
+        {0, 0, 0, 0}
+    };
+    int opt, index;
+
+    do {
+        opt = getopt_long(argc, (char *const *)argv, short_options, long_options, &index);
+
+        if (opt == -1) {
+            break;
+        }
+
+        switch (opt) {
+            case 'c': {
+                config = optarg;
+                break;
+            }
+
+            case 'd':{
+                fd->debug_flag = 1;
+                if (fd->debug_flag) sleng_debug("debug mode enable\n");
+                break;
+            }
+
+            default : {
+                if (fd->debug_flag) sleng_debug("Param(%c) is invalid\n", opt);
+                break;
+            }
+        }
+    } while (1);
 
     do {
         signal(SIGINT, signal_handler);
 
         /* Load config */
-        if (argc > 1)
-        {
-            config = argv[1];
-        }
-
         if ((fp_config = fopen(config, "r")) == NULL)
         {
             sleng_error("fopen[%s] error", config);
