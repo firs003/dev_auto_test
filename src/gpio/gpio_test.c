@@ -14,11 +14,46 @@
 typedef struct gpio_config_result
 {
 	struct {
-		int gpio;				/**< GPIO index */
+		int gpio;					/**< GPIO index */
 		unsigned char out[2];		/**< Test result as output */
 		unsigned char in[2];		/**< Test result as input */
 	} pair[2];
 } GPIO_CONFIG_RESULT, *PGPIO_CONFIG_RESULT;
+
+
+static inline void _print_devide_line(char *buf, int size, int offset)
+{
+	memset(buf, ' ', offset);
+	memset(buf + offset, '-', size);
+	buf[size - 1] = '\n';
+	buf[size] = 0;
+	fwrite(buf, 1, size, stdout);
+}
+
+
+static void _gpio_stat_print(GPIO_CONFIG_RESULT *gpio_matrix, int array_size)
+{
+	int i = 0;
+	char buf[128] = {0,};
+
+	printf("Statistics:\n");
+	sprintf(buf, "    |   PIN    | OUT  |  IN  |\n");
+	_print_devide_line(buf, strlen(buf), 4);
+	memset(buf, 0, sizeof(buf));
+	sprintf(buf, "    |   PIN    | OUT  |  IN  |\n");
+	fwrite(buf, 1, sizeof(buf), stdout);
+	_print_devide_line(buf, strlen(buf), 4);
+	for (i = 0; i < array_size; i++)
+	{
+		memset(buf, 0, sizeof(buf));
+		sprintf(buf, "    | [GPIO%2d] | %s | %s |\n", gpio_matrix[i].pair[0].gpio, (gpio_matrix[i].pair[1].in[0] != gpio_matrix[i].pair[1].in[1])? "\033[0;32;32mPass\033[m": "\033[0;32;31mFail\033[m", (gpio_matrix[i].pair[0].in[0] != gpio_matrix[i].pair[0].in[1])? "\033[0;32;32mPass\033[m": "\033[0;32;31mFail\033[m");
+		fwrite(buf, 1, sizeof(buf), stdout);
+		memset(buf, 0, sizeof(buf));
+		sprintf(buf, "    | [GPIO%2d] | %s | %s |\n", gpio_matrix[i].pair[1].gpio, (gpio_matrix[i].pair[0].in[0] != gpio_matrix[i].pair[0].in[1])? "\033[0;32;32mPass\033[m": "\033[0;32;31mFail\033[m", (gpio_matrix[i].pair[1].in[0] != gpio_matrix[i].pair[1].in[1])? "\033[0;32;32mPass\033[m": "\033[0;32;31mFail\033[m");
+		fwrite(buf, 1, sizeof(buf), stdout);
+	}
+	_print_devide_line(buf, strlen(buf), 4);
+}
 
 
 int main(int argc, const char *argv[])
@@ -110,7 +145,7 @@ int main(int argc, const char *argv[])
 				ret = -1;
 				break;
 			}
-			sleng_debug("option = %d\n", dev.option);
+			// sleng_debug("option = %d\n", dev.option);
 			gpio_matrix[i].pair[0].out[1] = gpio_matrix[i].pair[1].in[1] = dev.option;
 
 			dev.gpio = gpio_matrix[i].pair[0].gpio;			/* [0] output LOW */
@@ -130,7 +165,7 @@ int main(int argc, const char *argv[])
 				ret = -1;
 				break;
 			}
-			sleng_debug("option = %d\n", dev.option);
+			// sleng_debug("option = %d\n", dev.option);
 			gpio_matrix[i].pair[0].out[0] = gpio_matrix[i].pair[1].in[0] = dev.option;
 			/* Print result */
 			sleng_debug("GPIO[%d] -> GPIO[%d], change %d -> %d\n", gpio_matrix[i].pair[0].gpio, gpio_matrix[i].pair[1].gpio, gpio_matrix[i].pair[1].in[1], gpio_matrix[i].pair[1].in[0]);
@@ -196,6 +231,8 @@ int main(int argc, const char *argv[])
 			// sleng_debug(" gpio test Success:gpio=%d,action=%d,option=%d\n", dev.gpio, dev.action, dev.option);
 			sleng_debug("GPIO[%d] -> GPIO[%d], change %d -> %d\n", gpio_matrix[i].pair[1].gpio, gpio_matrix[i].pair[0].gpio, gpio_matrix[i].pair[0].in[1], gpio_matrix[i].pair[0].in[0]);
 		}
+
+		_gpio_stat_print(gpio_matrix, count);
 	} while(0);
 
 	/* Cleanup */

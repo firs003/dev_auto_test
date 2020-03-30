@@ -494,7 +494,7 @@ static inline void _print_devide_line(char *buf, int size, int offset)
 static void _stat_print(UART_CONFIG_S *uart_config_array, int array_size)
 {
     int i = 0;
-    char buf[128] = {0,};
+    char buf[256] = {0,};
 
 #if 0
     _print_devide_line(buf, sizeof(buf));
@@ -515,7 +515,7 @@ static void _stat_print(UART_CONFIG_S *uart_config_array, int array_size)
         if (uart_config_array[i].uart_path[0] != 0 && uart_config_array[i].tid > 0)
         {
             memset(buf, 0, sizeof(buf));
-            sprintf(buf, "    | %d | %s | Total:%u | Send:%u - %3u%%, Fail:%u - %3u%% | Recv:%u - %3u%%, Fail:%u - %3u%% |\n", i, uart_config_array[i].uart_path, uart_config_array[i].sendcnt,
+            sprintf(buf, "    | %d | %s | Total:%u | \033[0;32;32mSend\033[m:%u - %3u%%, \033[0;32;31mFail\033[m:%u - %3u%% | \033[0;32;32mRecv\033[m:%u - %3u%%, \033[0;32;31mFail\033[m:%u - %3u%% |\n", i, uart_config_array[i].uart_path, uart_config_array[i].sendcnt,
                     uart_config_array[i].sendcnt - uart_config_array[i].senderr, (uart_config_array[i].sendcnt)? (uart_config_array[i].sendcnt - uart_config_array[i].senderr) * 100 / uart_config_array[i].sendcnt: 0,
                     uart_config_array[i].senderr, (uart_config_array[i].sendcnt)? (uart_config_array[i].senderr) * 100 / uart_config_array[i].sendcnt: 0,
                     uart_config_array[i].recvcnt - uart_config_array[i].recverr, (uart_config_array[i].recvcnt)? (uart_config_array[i].recvcnt - uart_config_array[i].recverr) * 100 / uart_config_array[i].recvcnt: 0,
