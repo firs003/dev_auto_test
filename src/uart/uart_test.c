@@ -38,9 +38,10 @@ typedef struct uart_config_s
     pthread_t tid;
     int packsize;
     int baudrate;
-    unsigned int recverr;
+    unsigned int sendcnt;
     unsigned int senderr;
-    unsigned int totalcnt;
+    unsigned int recvcnt;
+    unsigned int recverr;
 } UART_CONFIG_S, *PUART_CONFIG_S;
 #define UART_CONFIG_S_LEN   sizeof(UART_CONFIG_S)
 
@@ -103,13 +104,13 @@ static void signal_handler(int signo) {
 
 static int uart_open(const char *dev_path, int mode, int baudrate)
 {
-    PUART_TEST_FD_S fd = &uart_fd;
+    // PUART_TEST_FD_S fd = &uart_fd;
     int fd_uart = -1, fd_mode = 0;
     unsigned int value;
     struct termios options;
 
     do {
-    	if (fd->debug_flag) sleng_debug("baudrate = %u\n", baudrate);
+    	// if (fd->debug_flag) sleng_debug("baudrate = %u\n", baudrate);
         switch (baudrate) {
             case 300 :
                 value = B300;
@@ -314,30 +315,39 @@ void *send_thread_func(void *arg)
             }
 #endif
             readlen = args->packsize;
-            args->totalcnt++;
+            args->sendcnt++;
             sendlen = write(fd_uart, sendbuf, readlen);
             if (sendlen < recvlen)
             {
                 args->senderr++;
-                sleng_error("[%s] send[%d < %d] error, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, sendlen, args->packsize, args->senderr, args->totalcnt, (args->totalcnt) ? 100 * (float)args->senderr / (float)args->totalcnt : 0.0, sendbuf[0]);
+                sleng_error("[%s] send[%d < %d] error, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, sendlen, args->packsize, args->senderr, args->sendcnt, (args->sendcnt) ? 100 * (float)args->senderr / (float)args->sendcnt : 0.0, sendbuf[0]);
             }
-            if (fd->debug_flag) sleng_debug("%u.sendlen=%d, buf=0x%02hhx %02hhx %02hhx %02hhx   %02hhx %02hhx %02hhx %02hhx\n", args->totalcnt, sendlen, sendbuf[0], sendbuf[1], sendbuf[2], sendbuf[3], sendbuf[4], sendbuf[5], sendbuf[6], sendbuf[7]);
+            if (fd->debug_flag) sleng_debug("[%s]%u.sendlen=%d, buf=0x%02hhx %02hhx %02hhx %02hhx   %02hhx %02hhx %02hhx %02hhx\n", args->uart_path, args->sendcnt, sendlen, sendbuf[0], sendbuf[1], sendbuf[2], sendbuf[3], sendbuf[4], sendbuf[5], sendbuf[6], sendbuf[7]);
 
+            args->recvcnt++;
             FD_ZERO(&rset);
             FD_SET(fd_uart, &rset);
-            tv.tv_sec = 1;
+            tv.tv_sec = 2;
             tv.tv_usec = 0;
             rc = select(fd_uart + 1, &rset, NULL, NULL, &tv);
-            sleng_debug("select rc=%d\n", rc);
+            // sleng_debug("select rc=%d\n", rc);
             if (rc < 0)
             {
                 args->recverr++;
-                sleng_error("[%s] recv[%d < %d] error, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, recvlen, args->packsize, args->recverr, args->totalcnt, (args->totalcnt) ? 100 * (float)args->recverr / (float)args->totalcnt : 0.0, recvbuf[0]);
+                sleng_error("[%s] select error, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, args->recverr, args->recvcnt, (args->recvcnt) ? 100 * (float)args->recverr / (float)args->recvcnt : 0.0, recvbuf[0]);
                 continue;
             }
             else if (rc == 0)
             {
-                args->recverr++;
+                if (fd->quit_flag)
+                {
+                    args->recverr++;
+                    sleng_error("[%s] select timeout, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, args->recverr, args->recvcnt, (args->recvcnt) ? 100 * (float)args->recverr / (float)args->recvcnt : 0.0, recvbuf[0]);
+                }
+                else
+                {
+                    args->recvcnt--;
+                }
                 continue;
             }
             usleep(150000);
@@ -346,9 +356,9 @@ void *send_thread_func(void *arg)
             if (recvlen < args->packsize || memcmp(sendbuf, recvbuf, readlen))
             {
                 args->recverr++;
-                sleng_error("[%s] recv[%d < %d] error, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, recvlen, args->packsize, args->recverr, args->totalcnt, (args->totalcnt) ? 100 * (float)args->recverr / (float)args->totalcnt : 0.0, recvbuf[0]);
+                sleng_error("[%s] recv[%d < %d] error, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, recvlen, args->packsize, args->recverr, args->recvcnt, (args->recvcnt) ? 100 * (float)args->recverr / (float)args->recvcnt : 0.0, recvbuf[0]);
             }
-            // if (fd->debug_flag) sleng_debug("%u.recvlen=%d, buf=0x%02hhx %02hhx %02hhx %02hhx   %02hhx %02hhx %02hhx %02hhx\n", args->totalcnt, recvlen, recvbuf[0], recvbuf[1], recvbuf[2], recvbuf[3], recvbuf[4], recvbuf[5], recvbuf[6], recvbuf[7]);
+            // if (fd->debug_flag) sleng_debug("%u.recvlen=%d, buf=0x%02hhx %02hhx %02hhx %02hhx   %02hhx %02hhx %02hhx %02hhx\n", args->recvcnt, recvlen, recvbuf[0], recvbuf[1], recvbuf[2], recvbuf[3], recvbuf[4], recvbuf[5], recvbuf[6], recvbuf[7]);
             usleep(850000);
         }
     } while(0);
@@ -373,7 +383,6 @@ void *send_thread_func(void *arg)
         fclose(fp_input);
         fp_input = NULL;
     }
-
 
     return ret;
 }
@@ -413,38 +422,48 @@ void *recv_thread_func(void *arg)
 
         while (!fd->quit_flag)
         {
-            args->totalcnt++;
+            args->recvcnt++;
             FD_ZERO(&rset);
             FD_SET(fd_uart, &rset);
-            tv.tv_sec = 1;
+            tv.tv_sec = 2;
             tv.tv_usec = 0;
             rc = select(fd_uart + 1, &rset, NULL, NULL, &tv);
             if (rc < 0)
             {
                 args->recverr++;
-                sleng_error("[%s] recv[%d < %d] error, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, recvlen, args->packsize, args->recverr, args->totalcnt, (args->totalcnt) ? 100 * (float)args->recverr / (float)args->totalcnt : 0.0, recvbuf[0]);
+                sleng_error("[%s] select error, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, args->recverr, args->recvcnt, (args->recvcnt) ? 100 * (float)args->recverr / (float)args->recvcnt : 0.0, recvbuf[0]);
                 continue;
             }
             else if (rc == 0)
             {
-                args->recverr++;
+                if (!fd->quit_flag)
+                {
+                    args->recverr++;
+                    sleng_error("[%s] select timeout, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, args->recverr, args->recvcnt, (args->recvcnt) ? 100 * (float)args->recverr / (float)args->recvcnt : 0.0, recvbuf[0]);
+                }
+                else
+                {
+                    args->recvcnt--;
+                }
                 continue;
             }
             usleep(150000);
 
+            memset(recvbuf, 0, args->packsize);
             recvlen = read(fd_uart, recvbuf, args->packsize);
             if (recvlen < args->packsize)
             {
                 args->recverr++;
-                sleng_error("[%s] recv[%d < %d] error, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, recvlen, args->packsize, args->recverr, args->totalcnt, (args->totalcnt) ? 100 * (float)args->recverr / (float)args->totalcnt : 0.0, recvbuf[0]);
+                sleng_error("[%s] recv[%d < %d] error, %u/%u, %.02f%%, 0x%02hhx", args->uart_path, recvlen, args->packsize, args->recverr, args->recvcnt, (args->recvcnt) ? 100 * (float)args->recverr / (float)args->recvcnt : 0.0, recvbuf[0]);
             }
-            if (fd->debug_flag) sleng_debug("%u.recvlen=%d, buf=0x%02hhx %02hhx %02hhx %02hhx   %02hhx %02hhx %02hhx %02hhx\n", args->totalcnt, recvlen, recvbuf[0], recvbuf[1], recvbuf[2], recvbuf[3], recvbuf[4], recvbuf[5], recvbuf[6], recvbuf[7]);
+            if (fd->debug_flag) sleng_debug("[%s]%u.recvlen=%d, buf=0x%02hhx %02hhx %02hhx %02hhx   %02hhx %02hhx %02hhx %02hhx\n", args->uart_path, args->recvcnt, recvlen, recvbuf[0], recvbuf[1], recvbuf[2], recvbuf[3], recvbuf[4], recvbuf[5], recvbuf[6], recvbuf[7]);
 
+            args->sendcnt++;
             sendlen = write(fd_uart, recvbuf, recvlen);
             if (sendlen < recvlen)
             {
                 args->senderr++;
-                sleng_error("[%s] send error, %u/%u, %.02f%%", args->uart_path, args->senderr, args->totalcnt, (args->totalcnt) ? 100 * (float)args->senderr / (float)args->totalcnt : 0.0);
+                sleng_error("[%s] send error, %u/%u, %.02f%%", args->uart_path, args->senderr, args->sendcnt, (args->sendcnt) ? 100 * (float)args->senderr / (float)args->sendcnt : 0.0);
             }
         }
     } while(0);
@@ -482,32 +501,31 @@ static void _stat_print(UART_CONFIG_S *uart_config_array, int array_size)
 #if 0
     _print_devide_line(buf, sizeof(buf));
     memset(buf, 0, sizeof(buf));
-    sprintf(buf, "  |No.| Dev\t| Total\t| Send\t| Recv\t|\n");
+    sprintf(buf, "    |No.| Dev\t| Total\t| Send\t| Recv\t|\n");
     fwrite(buf, 1, sizeof(buf), stdout);
 #endif
     printf("Statistics:\n");
-    sprintf(buf, "  | %d | %s | Total:%u | Send:%u-%u%%, Fail:%u-%u%% | Recv:%u-%u%%, Fail:%u-%u%% |\n", i, uart_config_array[i].uart_path, uart_config_array[i].totalcnt,
-    uart_config_array[i].totalcnt - uart_config_array[i].senderr, (uart_config_array[i].totalcnt - uart_config_array[i].senderr) * 100 / uart_config_array[i].totalcnt,
-    uart_config_array[i].senderr, (uart_config_array[i].senderr) * 100 / uart_config_array[i].totalcnt,
-    uart_config_array[i].totalcnt - uart_config_array[i].recverr, (uart_config_array[i].totalcnt - uart_config_array[i].recverr) * 100 / uart_config_array[i].totalcnt,
-    uart_config_array[i].senderr, (uart_config_array[i].senderr) * 100 / uart_config_array[i].totalcnt);
-    _print_devide_line(buf, strlen(buf), 2);
+    sprintf(buf, "    | %d | %s | Total:%u | Send:%u - %3u%%, Fail:%u - %3u%% | Recv:%u - %3u%%, Fail:%u - %3u%% |\n", i, uart_config_array[i].uart_path, uart_config_array[i].sendcnt,
+            uart_config_array[i].sendcnt - uart_config_array[i].senderr, (uart_config_array[i].sendcnt)? (uart_config_array[i].sendcnt - uart_config_array[i].senderr) * 100 / uart_config_array[i].sendcnt: 0,
+            uart_config_array[i].senderr, (uart_config_array[i].sendcnt)? (uart_config_array[i].senderr) * 100 / uart_config_array[i].sendcnt: 0,
+            uart_config_array[i].recvcnt - uart_config_array[i].recverr, (uart_config_array[i].recvcnt)? (uart_config_array[i].recvcnt - uart_config_array[i].recverr) * 100 / uart_config_array[i].recvcnt: 0,
+            uart_config_array[i].recverr, (uart_config_array[i].recvcnt)? (uart_config_array[i].recverr) * 100 / uart_config_array[i].recvcnt: 0);
+    _print_devide_line(buf, strlen(buf), 4);
     for (i = 0; i < array_size; i++)
     {
         // sleng_debug("path=%s, tid=%lu\n", uart_config_array[i].uart_path, uart_config_array[i].tid);
         if (uart_config_array[i].uart_path[0] != 0 && uart_config_array[i].tid > 0)
         {
-            // sleng_debug("%d.total=%u, senderr=%u, recverr=%u\n", i, uart_config_array[i].totalcnt, uart_config_array[i].senderr, uart_config_array[i].recverr);
             memset(buf, 0, sizeof(buf));
-            sprintf(buf, "  | %d | %s | Total:%u | Send:%u-%u%%, Fail:%u-%u%% | Recv:%u-%u%%, Fail:%u-%u%% |\n", i, uart_config_array[i].uart_path, uart_config_array[i].totalcnt,
-            uart_config_array[i].totalcnt - uart_config_array[i].senderr, (uart_config_array[i].totalcnt - uart_config_array[i].senderr) * 100 / uart_config_array[i].totalcnt,
-            uart_config_array[i].senderr, (uart_config_array[i].senderr) * 100 / uart_config_array[i].totalcnt,
-            uart_config_array[i].totalcnt - uart_config_array[i].recverr, (uart_config_array[i].totalcnt - uart_config_array[i].recverr) * 100 / uart_config_array[i].totalcnt,
-            uart_config_array[i].recverr, (uart_config_array[i].recverr) * 100 / uart_config_array[i].totalcnt);
+            sprintf(buf, "    | %d | %s | Total:%u | Send:%u - %3u%%, Fail:%u - %3u%% | Recv:%u - %3u%%, Fail:%u - %3u%% |\n", i, uart_config_array[i].uart_path, uart_config_array[i].sendcnt,
+                    uart_config_array[i].sendcnt - uart_config_array[i].senderr, (uart_config_array[i].sendcnt)? (uart_config_array[i].sendcnt - uart_config_array[i].senderr) * 100 / uart_config_array[i].sendcnt: 0,
+                    uart_config_array[i].senderr, (uart_config_array[i].sendcnt)? (uart_config_array[i].senderr) * 100 / uart_config_array[i].sendcnt: 0,
+                    uart_config_array[i].recvcnt - uart_config_array[i].recverr, (uart_config_array[i].recvcnt)? (uart_config_array[i].recvcnt - uart_config_array[i].recverr) * 100 / uart_config_array[i].recvcnt: 0,
+                    uart_config_array[i].recverr, (uart_config_array[i].recvcnt)? (uart_config_array[i].recverr) * 100 / uart_config_array[i].recvcnt: 0);
             fwrite(buf, 1, sizeof(buf), stdout);
         }
     }
-    _print_devide_line(buf, strlen(buf), 2);
+    _print_devide_line(buf, strlen(buf), 4);
 }
 
 
@@ -579,12 +597,12 @@ int main(int argc, char const *argv[])
                 ret = -1;
                 break;
             }
-            sleng_debug("send=%s recv=%s pack=%d baud=%d\n", uart_config_array[i].uart_path, uart_config_array[i + 1].uart_path, packsize, baudrate);
+            // sleng_debug("send=%s recv=%s pack=%d baud=%d\n", uart_config_array[i].uart_path, uart_config_array[i + 1].uart_path, packsize, baudrate);
             uart_config_array[i].role     = THREAD_ROLE_SENDER;
             uart_config_array[i + 1].role = THREAD_ROLE_RECVER;
             uart_config_array[i].packsize = uart_config_array[i + 1].packsize = packsize;
             uart_config_array[i].baudrate = uart_config_array[i + 1].baudrate = baudrate;
-            sleng_debug("UART[%s] ==> UART[%s]: %d\n", uart_config_array[i].uart_path, uart_config_array[i + 1].uart_path, uart_config_array[i].baudrate);
+            sleng_debug("UART[%s] ==> UART[%s]: %d bps, pack=%d\n", uart_config_array[i].uart_path, uart_config_array[i + 1].uart_path, uart_config_array[i].baudrate, uart_config_array[i].packsize);
         }
         // if (ret == -1)  break;
 
