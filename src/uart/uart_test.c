@@ -292,16 +292,15 @@ void *send_thread_func(void *arg)
             ret = THREAD_FAILURE;
             break;
         }
-
+#if 0
         int i;
         for (i = 0; i < args->packsize; i++)
         {
             sendbuf[i] = i;
         }
-
+#endif
         while (!fd->quit_flag)
         {
-#if 0
             readlen = fread(sendbuf, 1, args->packsize, fp_input);
             if (readlen < 0)
             {
@@ -313,7 +312,6 @@ void *send_thread_func(void *arg)
             {
                 fseek(fp_input, 0, SEEK_SET);
             }
-#endif
             readlen = args->packsize;
             args->sendcnt++;
             sendlen = write(fd_uart, sendbuf, readlen);
