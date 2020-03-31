@@ -398,7 +398,7 @@ void *recv_thread_func(void *arg)
     struct timeval tv;
     int rc = 0;
 
-    fd->debug_flag = 1;
+    // fd->debug_flag = 1;
 
     do {
         fd_uart = uart_open(args->uart_path, UART_MODE_RDWR, args->baudrate);
