@@ -67,9 +67,10 @@ typedef struct uart_test_file_desc
     char input_file[64];
     int quit_flag: 1;
     int debug_flag: 1;
+    unsigned int time;
 } UART_TEST_FD_S, *PUART_TEST_FD_S;
 #define UART_TEST_FD_S_LEN  sizeof(UART_TEST_FD_S)
-static UART_TEST_FD_S uart_fd = {0};
+static UART_TEST_FD_S uart_fd = {{0, }, 0, 0, -1};
 
 
 typedef enum uart_rw_mode {
@@ -537,9 +538,11 @@ int main(int argc, char const *argv[])
     FILE *fp_config = NULL;
     UART_CONFIG_S uart_config_array[MAX_UART_AMOUNT] = {0};
     int i;
-    const char short_options[] = "c:d";
+    unsigned int time_old = 0;
+    const char short_options[] = "c:t:d";
     const struct option long_options[] = {
         {"config",		required_argument,	NULL,	'c'},
+        {"time",		required_argument,	NULL,	't'},
         {"debug",		no_argument,		NULL,	'd'},
         {0, 0, 0, 0}
     };
@@ -555,6 +558,11 @@ int main(int argc, char const *argv[])
         switch (opt) {
             case 'c': {
                 config = optarg;
+                break;
+            }
+
+            case 't': {
+                fd->time = atoi(optarg);
                 break;
             }
 
@@ -588,6 +596,21 @@ int main(int argc, char const *argv[])
             fseek(fp_config, 0, SEEK_SET);
         }
 
+        time_old = fd->time;
+        ret = fscanf(fp_config, "time:%u\n", &fd->time);
+        sleng_debug("fscanf for time return %d\n", ret);
+        if (ret < 1)
+        {
+            fd->time = time_old;
+            fseek(fp_config, 0, SEEK_SET);
+        }
+        else if (ret == 0)
+        {
+            fd->time = time_old;
+        }
+        sleng_debug("time: %us\n", fd->time);
+
+
         for (i = 0; i < MAX_UART_AMOUNT; i += 2)
         {
             int packsize, baudrate;
@@ -619,6 +642,12 @@ int main(int argc, char const *argv[])
         }
 
     } while(0);
+
+    for (i = 0; i < fd->time && !fd->quit_flag; i++)
+    {
+        sleep(1);
+    }
+    fd->quit_flag = 1;
 
     for (i = 0; i < MAX_UART_AMOUNT; i++)
     {
