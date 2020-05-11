@@ -598,7 +598,7 @@ int main(int argc, char const *argv[])
 
         time_old = fd->time;
         ret = fscanf(fp_config, "time:%u\n", &fd->time);
-        sleng_debug("fscanf for time return %d\n", ret);
+        if (fd->debug_flag) sleng_debug("fscanf for time return %d\n", ret);
         if (ret < 1)
         {
             fd->time = time_old;
